@@ -2,6 +2,7 @@ package com.cadence.cadence.habit.web
 
 import com.cadence.cadence.habit.application.*
 import com.cadence.cadence.habit.domain.*
+import jakarta.validation.constraints.NotBlank
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.*
@@ -9,6 +10,7 @@ import java.util.UUID
 
 data class CreateHabitRequest(
   val name: String,
+  @NotBlank
   val description: String? = null,
   val windowType: String,
   val resetMode: String,
@@ -70,23 +72,45 @@ class HabitController(
     @RequestHeader("X-Player-Id") playerId: UUID,
     @RequestBody request: CreateHabitRequest
   ): ResponseEntity<Any> {
+    val windowType = parseEnum<WindowType>(request.windowType, "windowType")
+      ?: return ResponseEntity.badRequest().body(
+        ErrorResponse("Invalid windowType: ${request.windowType}. Valid values: ${WindowType.entries.map { it.name }}")
+      )
+
+    val resetMode = parseEnum<ResetMode>(request.resetMode, "resetMode")
+      ?: return ResponseEntity.badRequest().body(
+        ErrorResponse("Invalid resetMode: ${request.resetMode}. Valid values: ${ResetMode.entries.map { it.name }}")
+      )
+
+    val steps = request.steps.mapIndexed { index, step ->
+      val difficulty = parseEnum<Difficulty>(step.difficulty, "steps[$index].difficulty")
+        ?: return ResponseEntity.badRequest().body(
+          ErrorResponse("Invalid difficulty: ${step.difficulty}. Valid values: ${Difficulty.entries.map { it.name }}")
+        )
+      StepInput(
+        id = step.id ?: UUID.randomUUID(),
+        name = step.name,
+        sortOrder = step.sortOrder,
+        difficulty = difficulty,
+        baseXp = step.baseXp,
+        dependsOn = step.dependsOnStepIds.toSet()
+      )
+    }
+
+    val policies = try {
+      request.policies.map { it.toDomain() }
+    } catch (e: IllegalArgumentException) {
+      return ResponseEntity.badRequest().body(ErrorResponse(e.message ?: "Invalid policy configuration"))
+    }
+
     val command = CreateHabitCommand(
       playerId = playerId,
       name = request.name,
       description = request.description,
-      windowType = WindowType.valueOf(request.windowType),
-      resetMode = ResetMode.valueOf(request.resetMode),
-      steps = request.steps.map { step ->
-        StepInput(
-          id = step.id ?: UUID.randomUUID(),
-          name = step.name,
-          sortOrder = step.sortOrder,
-          difficulty = Difficulty.valueOf(step.difficulty),
-          baseXp = step.baseXp,
-          dependsOn = step.dependsOnStepIds.toSet()
-        )
-      },
-      policies = request.policies.map { it.toDomain() }
+      windowType = windowType,
+      resetMode = resetMode,
+      steps = steps,
+      policies = policies
     )
 
     return when (val result = createHabitUseCase.execute(command)) {
@@ -95,6 +119,14 @@ class HabitController(
 
       is CreateHabitResult.ValidationError ->
         ResponseEntity.badRequest().body(ErrorResponse(result.message))
+    }
+  }
+
+  private inline fun <reified T : Enum<T>> parseEnum(value: String, fieldName: String): T? {
+    return try {
+      enumValueOf<T>(value)
+    } catch (e: IllegalArgumentException) {
+      null
     }
   }
 
@@ -148,9 +180,23 @@ class HabitController(
   }
 
   private fun PolicyRequest.toDomain(): Policy = when (type) {
-    "QUOTA" -> Policy.Quota((config["maxCycles"] as Number).toInt())
-    "COOLDOWN" -> Policy.Cooldown((config["minutes"] as Number).toInt())
-    "REWARD" -> Policy.Reward((config["multiplier"] as Number).toDouble())
-    else -> throw IllegalArgumentException("Unknown policy type: $type")
+    "QUOTA" -> Policy.Quota(config.requireInt("maxCycles", type))
+    "COOLDOWN" -> Policy.Cooldown(config.requireInt("minutes", type))
+    "REWARD" -> Policy.Reward(config.requireDouble("multiplier", type))
+    else -> throw IllegalArgumentException("Unknown policy type: $type. Valid types: QUOTA, COOLDOWN, REWARD")
+  }
+
+  private fun Map<String, Any>.requireInt(key: String, policyType: String): Int {
+    val value = this[key]
+      ?: throw IllegalArgumentException("Missing required '$key' for policy type '$policyType'")
+    return (value as? Number)?.toInt()
+      ?: throw IllegalArgumentException("Invalid '$key' for policy type '$policyType': expected number")
+  }
+
+  private fun Map<String, Any>.requireDouble(key: String, policyType: String): Double {
+    val value = this[key]
+      ?: throw IllegalArgumentException("Missing required '$key' for policy type '$policyType'")
+    return (value as? Number)?.toDouble()
+      ?: throw IllegalArgumentException("Invalid '$key' for policy type '$policyType': expected number")
   }
 }
