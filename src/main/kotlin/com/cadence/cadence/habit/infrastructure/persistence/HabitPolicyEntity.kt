@@ -14,17 +14,17 @@ data class HabitPolicyEntity(
 ) {
   fun toDomain(): Policy = when (policyType) {
     "QUOTA" -> {
-      val config = Gson().fromJson(configJson, QuotaConfig::class.java)
+      val config = gson.fromJson(configJson, QuotaConfig::class.java)
       Policy.Quota(config.maxCycles)
     }
 
     "COOLDOWN" -> {
-      val config = Gson().fromJson(configJson, CooldownConfig::class.java)
+      val config = gson.fromJson(configJson, CooldownConfig::class.java)
       Policy.Cooldown(config.minutes)
     }
 
     "REWARD" -> {
-      val config = Gson().fromJson(configJson, RewardConfig::class.java)
+      val config = gson.fromJson(configJson, RewardConfig::class.java)
       Policy.Reward(config.multiplier)
     }
 

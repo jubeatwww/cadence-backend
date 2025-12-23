@@ -39,6 +39,14 @@ class CreateHabitUseCase(
 
   @Transactional
   fun execute(command: CreateHabitCommand): CreateHabitResult {
+    if (command.steps.isEmpty()) {
+      return CreateHabitResult.ValidationError("Habit must have at least one step")
+    }
+
+    if (command.resetMode == ResetMode.INFINITE && command.policies.any { it is Policy.Quota }) {
+      return CreateHabitResult.ValidationError("Quota policy is not allowed for INFINITE reset mode")
+    }
+
     val steps = command.steps.map { input ->
       Step(
         id = input.id,
