@@ -36,9 +36,9 @@ object TestcontainersConfig {
   val postgresContainer = PostgreSQLContainer(DockerImageName.parse("postgres:17.3")).apply {
     withNetwork(sharedNetwork)
     withNetworkAliases("postgres")
-    withDatabaseName("sunnymiucatapi")
-    withUsername("sunnymiucat")
-    withPassword("password")
+    withDatabaseName("cadence")
+    withUsername("cadence")
+    withPassword("cadence")
     withCommand(
       "postgres",
       "-c", "wal_level=logical",
