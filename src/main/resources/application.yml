@@ -1,0 +1,9 @@
+spring:
+  application:
+    name: Cadence
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/cadence
+    username: ${DB_USERNAME:cadence}
+    password: ${DB_PASSWORD:cadence}
+    driver-class-name: org.postgresql.Driver

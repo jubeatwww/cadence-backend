@@ -1,0 +1,225 @@
+openapi: 3.0.0
+info:
+  title: Habit Context API
+  version: 1.0.0
+  description: API for managing Habits, dependencies, and execution tracking.
+
+paths:
+  /habits:
+    post:
+      summary: Create a new Habit
+      operationId: createHabit
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateHabitRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HabitResponse'
+    get:
+      summary: List all habits for player
+      operationId: listHabits
+      responses:
+        '200':
+          description: List of habits
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/HabitResponse'
+
+  /habits/{habitId}:
+    get:
+      summary: Get habit details
+      operationId: getHabit
+      parameters:
+        - name: habitId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Habit details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HabitResponse'
+
+  /tasks/daily:
+    get:
+      summary: Get today's available tasks (Task Board)
+      operationId: getDailyTasks
+      parameters:
+        - name: date
+          in: query
+          required: false
+          description: ISO Date (YYYY-MM-DD), defaults to today UTC
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: List of available tasks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TaskDTO'
+
+  /completions:
+    post:
+      summary: Complete a step (Execute Task)
+      operationId: completeStep
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CompleteStepRequest'
+      responses:
+        '200':
+          description: Completion recorded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompletionResponse'
+        '400':
+          description: Validation error (Cooldown, Dependency not met)
+        '422':
+          description: Domain rule violation (Quota exceeded)
+
+components:
+  schemas:
+    CreateHabitRequest:
+      type: object
+      required:
+        - name
+        - windowType
+        - resetMode
+        - steps
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        windowType:
+          type: string
+          enum: [DAILY, WEEKLY, BIWEEKLY, MONTHLY]
+        resetMode:
+          type: string
+          enum: [WINDOW_BOUND, INFINITE]
+        steps:
+          type: array
+          items:
+            $ref: '#/components/schemas/StepDefinition'
+        policies:
+          type: array
+          items:
+            $ref: '#/components/schemas/PolicyDefinition'
+
+    StepDefinition:
+      type: object
+      required:
+        - name
+        - difficulty
+        - baseXp
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Optional for create (client generated or server generated)
+        name:
+          type: string
+        difficulty:
+          type: string
+          enum: [EASY, MEDIUM, HARD]
+        baseXp:
+          type: integer
+        dependsOnStepIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+
+    PolicyDefinition:
+      type: object
+      required:
+        - type
+        - config
+      properties:
+        type:
+          type: string
+          enum: [QUOTA, COOLDOWN, REWARD]
+        config:
+          type: object
+          description: JSON configuration specific to policy type
+
+    HabitResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        # ... other fields matching domain model
+
+    TaskDTO:
+      type: object
+      description: A derived view of a step that is ready to be executed
+      properties:
+        habitId:
+          type: string
+          format: uuid
+        stepId:
+          type: string
+          format: uuid
+        habitName:
+          type: string
+        stepName:
+          type: string
+        xpValue:
+          type: integer
+        status:
+          type: string
+          enum: [AVAILABLE, LOCKED, COMPLETED]
+
+    CompleteStepRequest:
+      type: object
+      required:
+        - habitId
+        - stepId
+        - occurredAt
+      properties:
+        habitId:
+          type: string
+          format: uuid
+        stepId:
+          type: string
+          format: uuid
+        occurredAt:
+          type: string
+          format: date-time
+        note:
+          type: string
+
+    CompletionResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        xpGained:
+          type: integer
+        newCycleIndex:
+          type: integer
